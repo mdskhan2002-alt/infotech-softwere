@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------
+  # PostgreSQL Database Service
+  # ----------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: infotech_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${POSTGRES_DB:-infotech_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-infotech_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - infotech_network
+
+  # ----------------------------------------------------
+  # FastAPI Backend Service (Core Logic & AI)
+  # ----------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: infotech_backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-infotech_db}
+      - SECRET_KEY=${SECRET_KEY:-change-this-super-secret-key-infotech-2026-xyz987654321}
+      - ALGORITHM=${ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@infotechsoftware.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-AdminSecurePassword2026!}
+      - CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8000"]
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN:-}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID:-}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN:-infotech_webhook_verification_token_2026}
+    volumes:
+      - ./backend:/app
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - infotech_network
+
+  # ----------------------------------------------------
+  # Next.js Frontend Service (UI & Admin)
+  # ----------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: infotech_frontend
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_SITE_URL=http://localhost:3000
+      - NEXT_PUBLIC_AGENCY_EMAIL=mdskhan2002@gmail.com
+      - NEXT_PUBLIC_LINKEDIN=https://www.linkedin.com/in/mohammad-shahabuddin-887832343?utm_source=share_via&utm_content=profile&utm_medium=member_android
+      - NEXT_PUBLIC_INSTAGRAM=https://www.instagram.com/shahabuddin_7.7?igsh=MXFqbnh0bHVlNjlwcQ==
+      - NEXT_PUBLIC_MAPS=https://maps.app.goo.gl/dsZvoZ6Va3HsuxCG9
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    networks:
+      - infotech_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  infotech_network:
+    driver: bridge
